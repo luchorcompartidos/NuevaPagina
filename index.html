@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cinemateca — Buscador</title>
+<style>
+  :root{
+    --bg: #15130f;
+    --panel: #1e1b16;
+    --panel-2: #262119;
+    --ink: #f2ece0;
+    --ink-dim: #b8ae9c;
+    --gold: #d6a94a;
+    --gold-dim: #8a713a;
+    --wine: #7a2e2e;
+    --line: #3a342a;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at top, rgba(214,169,74,0.06), transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family: Georgia, 'Iowan Old Style', serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:32px 20px 80px;}
+
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:18px;
+    margin-bottom:28px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  h1{
+    font-size:2rem;
+    letter-spacing:0.02em;
+    margin:0;
+    font-weight:400;
+  }
+  h1 em{
+    font-style:italic;
+    color:var(--gold);
+  }
+  .count{
+    font-family:var(--mono);
+    font-size:0.75rem;
+    color:var(--ink-dim);
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+  }
+
+  .search-row{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  input[type="text"]{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:0.95rem;
+    padding:14px 16px;
+    border-radius:2px;
+    outline:none;
+    transition:border-color 0.15s;
+  }
+  input[type="text"]:focus{border-color:var(--gold-dim);}
+  input[type="text"]::placeholder{color:var(--ink-dim);}
+
+  .tags-panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:2px;
+    padding:16px;
+    margin-bottom:28px;
+  }
+  .tags-panel .label{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--ink-dim);
+    margin-bottom:10px;
+  }
+  .tag-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    font-family:var(--mono);
+    font-size:0.8rem;
+    padding:6px 12px;
+    border:1px solid var(--line);
+    border-radius:20px;
+    color:var(--ink-dim);
+    cursor:pointer;
+    background:transparent;
+    transition:all 0.15s;
+    user-select:none;
+  }
+  .chip:hover{border-color:var(--gold-dim);color:var(--ink);}
+  .chip.active{
+    background:var(--gold);
+    border-color:var(--gold);
+    color:#1a1710;
+    font-weight:600;
+  }
+
+  .status{
+    font-family:var(--mono);
+    font-size:0.8rem;
+    color:var(--ink-dim);
+    margin-bottom:16px;
+    min-height:1.2em;
+  }
+  .status.err{color:#c47a5a;}
+
+  .results{display:flex;flex-direction:column;gap:2px;}
+  .card{
+    display:grid;
+    grid-template-columns:56px 1fr auto;
+    gap:16px;
+    align-items:center;
+    padding:16px;
+    background:var(--panel);
+    border:1px solid transparent;
+    border-bottom:1px solid var(--line);
+    transition:background 0.15s;
+  }
+  .card:hover{background:var(--panel-2);}
+  .card:first-child{border-top:1px solid var(--line);}
+
+  .match-score{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    color:var(--gold);
+    text-align:center;
+    border:1px solid var(--gold-dim);
+    border-radius:50%;
+    width:44px;height:44px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .card-body .title{
+    font-size:1.15rem;
+    margin:0 0 4px;
+  }
+  .card-body .meta{
+    font-family:var(--mono);
+    font-size:0.75rem;
+    color:var(--ink-dim);
+    line-height:1.6;
+  }
+  .card-body .meta b{color:var(--ink);font-weight:500;}
+  .card-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    justify-content:flex-end;
+    max-width:220px;
+  }
+  .card-tags span{
+    font-family:var(--mono);
+    font-size:0.65rem;
+    padding:3px 8px;
+    background:var(--panel-2);
+    color:var(--ink-dim);
+    border-radius:12px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  .card-tags span.hit{
+    color:var(--gold);
+    background:rgba(214,169,74,0.12);
+  }
+
+  .empty{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--ink-dim);
+    font-family:var(--mono);
+    font-size:0.85rem;
+  }
+
+  .config-note{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    color:var(--ink-dim);
+    background:var(--panel);
+    border:1px dashed var(--line);
+    padding:12px 14px;
+    border-radius:2px;
+    margin-bottom:24px;
+    line-height:1.6;
+  }
+  .config-note code{color:var(--gold);}
+
+  @media (max-width:520px){
+    .card{grid-template-columns:40px 1fr;}
+    .card-tags{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Cinema<em>teca</em></h1>
+    <div class="count" id="countLabel">cargando…</div>
+  </header>
+
+  <div class="config-note" id="configNote">
+    Fuente de datos: editá la constante <code>CSV_URL</code> al final del archivo con el link "Publicar en la web → CSV" de tu Google Sheet.
+  </div>
+
+  <div class="search-row">
+    <input type="text" id="searchInput" placeholder="Buscar por título, actor, director…" autocomplete="off">
+  </div>
+
+  <div class="tags-panel">
+    <div class="label">Filtrar por tag</div>
+    <div class="tag-chips" id="tagChips"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="results" id="results"></div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* =====================================================================
+   CONFIGURACIÓN
+   Pegá acá la URL de tu Google Sheet publicada como CSV.
+   Cómo obtenerla: en Google Sheets → Archivo → Compartir →
+   Publicar en la web → elegí la hoja → formato CSV → Publicar.
+   Copiá el link que te da y pegalo abajo.
+   ===================================================================== */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr_1_p67o6NmEqKIUlajgPTBcJlXplp85qT6LdeY6MpOAOcDauI1fSZLUg9-6gGqDncDADDsNdpsHS/pub?gid=2109237709&single=true&output=csv";
+
+/* Nombres de columnas esperados en tu planilla (ajustá si los tuyos
+   se llaman distinto). No hace falta que existan todas. */
+const COLUMNS = {
+  title: ["titulo", "título", "title", "nombre", "pelicula", "película"],
+  year: ["año", "ano", "year"],
+  Type ["Tipo", "Categoria", "Serie/Pelicula"],
+  Theme ["Tematica],
+  actors: ["actores", "actors", "reparto", "cast"],
+  Characters: ["Personajes", "actors", "reparto", "cast"],
+  director: ["director", "directores"],
+  Generos: ["Generos"],
+
+  
+  tags: ["tags", "etiquetas", "genero", "género", "genres"]
+};
+
+/* ===================================================================== */
+
+let allMovies = [];
+let fuse = null;
+let activeTags = new Set();
+
+function findKey(row, aliases){
+  const keys = Object.keys(row);
+  for(const alias of aliases){
+    const found = keys.find(k => k.trim().toLowerCase() === alias);
+    if(found) return found;
+  }
+  return null;
+}
+
+function splitMulti(value){
+  if(!value) return [];
+  return value.split(/[,;/|]/).map(s => s.trim()).filter(Boolean);
+}
+
+function normalizeRows(rows){
+  if(rows.length === 0) return [];
+  const sample = rows[0];
+  const keyMap = {};
+  for(const field in COLUMNS){
+    keyMap[field] = findKey(sample, COLUMNS[field]);
+  }
+
+  return rows.map((row, i) => {
+    const title = keyMap.title ? row[keyMap.title] : (row[Object.keys(row)[0]] || "Sin título");
+    const actors = keyMap.actors ? splitMulti(row[keyMap.actors]) : [];
+    const tags = keyMap.tags ? splitMulti(row[keyMap.tags]) : [];
+    const director = keyMap.director ? row[keyMap.director] : "";
+    const year = keyMap.year ? row[keyMap.year] : "";
+    return {
+      id: i,
+      title: title || "Sin título",
+      actors,
+      tags,
+      director: director || "",
+      year: year || "",
+      raw: row
+    };
+  });
+}
+
+function buildFuse(movies){
+  return new Fuse(movies, {
+    includeScore: true,
+    threshold: 0.4,
+    ignoreLocation: true,
+    keys: [
+      { name: "title", weight: 0.4 },
+      { name: "actors", weight: 0.3 },
+      { name: "tags", weight: 0.2 },
+      { name: "director", weight: 0.1 }
+    ]
+  });
+}
+
+function renderTagChips(movies){
+  const tagSet = new Set();
+  movies.forEach(m => m.tags.forEach(t => tagSet.add(t)));
+  const container = document.getElementById("tagChips");
+  container.innerHTML = "";
+  if(tagSet.size === 0){
+    container.innerHTML = '<span style="font-family:var(--mono);font-size:0.75rem;color:var(--ink-dim)">No se detectaron tags en la planilla.</span>';
+    return;
+  }
+  [...tagSet].sort().forEach(tag => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = tag;
+    chip.onclick = () => {
+      if(activeTags.has(tag)) activeTags.delete(tag);
+      else activeTags.add(tag);
+      chip.classList.toggle("active");
+      runSearch();
+    };
+    container.appendChild(chip);
+  });
+}
+
+function runSearch(){
+  const query = document.getElementById("searchInput").value.trim();
+  let candidates = allMovies;
+
+  if(activeTags.size > 0){
+    candidates = candidates.filter(m =>
+      [...activeTags].every(tag => m.tags.includes(tag))
+    );
+  }
+
+  let results;
+  if(query.length === 0){
+    results = candidates.map(m => ({ item: m, score: 0 }));
+  } else {
+    const localFuse = buildFuse(candidates);
+    results = localFuse.search(query);
+  }
+
+  renderResults(results, query);
+}
+
+function renderResults(results, query){
+  const container = document.getElementById("results");
+  const status = document.getElementById("status");
+  container.innerHTML = "";
+
+  status.textContent = query
+    ? `${results.length} resultado(s) para "${query}"`
+    : `${results.length} película(s) en la base`;
+  status.classList.remove("err");
+
+  if(results.length === 0){
+    container.innerHTML = '<div class="empty">No se encontraron coincidencias. Probá con otro término o quitá filtros.</div>';
+    return;
+  }
+
+  results
+    .sort((a,b) => (a.score ?? 0) - (b.score ?? 0))
+    .forEach(({item, score}) => {
+      const matchPct = query ? Math.round((1 - score) * 100) : null;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="match-score">${matchPct !== null ? matchPct + "%" : "—"}</div>
+        <div class="card-body">
+          <p class="title">${escapeHtml(item.title)}</p>
+          <div class="meta">
+            ${item.year ? `<b>${escapeHtml(String(item.year))}</b> · ` : ""}
+            ${item.director ? escapeHtml(item.director) + " · " : ""}
+            ${item.actors.slice(0,3).map(escapeHtml).join(", ")}
+          </div>
+        </div>
+        <div class="card-tags">
+          ${item.tags.map(t => `<span class="${activeTags.has(t) ? 'hit' : ''}">${escapeHtml(t)}</span>`).join("")}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+}
+
+function escapeHtml(str){
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function loadData(){
+  const status = document.getElementById("status");
+  const countLabel = document.getElementById("countLabel");
+
+  if(!CSV_URL || CSV_URL === "PEGA_ACA_TU_URL_CSV"){
+    status.textContent = "Falta configurar CSV_URL en el código (ver nota arriba).";
+    status.classList.add("err");
+    countLabel.textContent = "sin datos";
+    return;
+  }
+
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(res){
+      allMovies = normalizeRows(res.data);
+      fuse = buildFuse(allMovies);
+      countLabel.textContent = `${allMovies.length} películas`;
+      document.getElementById("configNote").style.display = "none";
+      renderTagChips(allMovies);
+      runSearch();
+    },
+    error: function(err){
+      status.textContent = "Error al cargar la planilla: " + err.message;
+      status.classList.add("err");
+      countLabel.textContent = "error";
+    }
+  });
+}
+
+document.getElementById("searchInput").addEventListener("input", () => {
+  runSearch();
+});
+
+loadData();
+</script>
+</body>
+</html>
