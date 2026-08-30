@@ -342,6 +342,11 @@
   </div>
 
   <div class="tags-panel">
+    <div class="label">Filtrar por plataforma</div>
+    <div class="tag-chips" id="platformChips"></div>
+  </div>
+
+  <div class="tags-panel">
     <div class="label">Filtrar por tag</div>
     <div class="tag-chips" id="tagChips"></div>
   </div>
@@ -443,6 +448,7 @@ FICHA_ORDER_GROUPS.forEach((variants, idx) => {
 let allMovies = [];
 let fuse = null;
 let activeTags = new Set();
+let activePlatforms = new Set();
 let sortMode = "relevance";
 
 const LEADING_ARTICLES = ["the", "el", "la", "los", "las"];
@@ -506,6 +512,7 @@ function normalizeRows(rows){
     const year = keyMap.year ? row[keyMap.year] : "";
     const type = keyMap.type ? row[keyMap.type] : "";
     const platform = keyMap.platform ? row[keyMap.platform] : "";
+    const platforms = keyMap.platform ? splitMulti(row[keyMap.platform]) : [];
     return {
       id: i,
       title: title || "Sin título",
@@ -516,6 +523,7 @@ function normalizeRows(rows){
       year: year || "",
       type: type || "",
       platform: platform || "",
+      platforms,
       raw: row // objeto completo con TODAS las columnas, para la búsqueda y la ficha
     };
   });
@@ -557,6 +565,29 @@ function renderTagChips(movies){
   });
 }
 
+function renderPlatformChips(movies){
+  const platformSet = new Set();
+  movies.forEach(m => m.platforms.forEach(p => platformSet.add(p)));
+  const container = document.getElementById("platformChips");
+  container.innerHTML = "";
+  if(platformSet.size === 0){
+    container.innerHTML = '<span style="font-family:var(--mono);font-size:0.75rem;color:var(--ink-dim)">No se detectaron plataformas en la planilla.</span>';
+    return;
+  }
+  [...platformSet].sort().forEach(platform => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = platform;
+    chip.onclick = () => {
+      if(activePlatforms.has(platform)) activePlatforms.delete(platform);
+      else activePlatforms.add(platform);
+      chip.classList.toggle("active");
+      runSearch();
+    };
+    container.appendChild(chip);
+  });
+}
+
 function runSearch(){
   const query = document.getElementById("searchInput").value.trim();
   let candidates = allMovies;
@@ -564,6 +595,13 @@ function runSearch(){
   if(activeTags.size > 0){
     candidates = candidates.filter(m =>
       [...activeTags].every(tag => m.tags.includes(tag))
+    );
+  }
+
+  // Filtro por plataforma: OR entre las seleccionadas (alcanza con matchear una)
+  if(activePlatforms.size > 0){
+    candidates = candidates.filter(m =>
+      m.platforms.some(p => activePlatforms.has(p))
     );
   }
 
@@ -717,6 +755,7 @@ function loadData(){
       fuse = buildFuse(allMovies);
       countLabel.textContent = `${allMovies.length} películas`;
       document.getElementById("configNote").style.display = "none";
+      renderPlatformChips(allMovies);
       renderTagChips(allMovies);
       runSearch();
     },
