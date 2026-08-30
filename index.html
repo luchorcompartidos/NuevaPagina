@@ -280,6 +280,21 @@
     color:var(--ink-dim);
   }
   .ficha dd{margin:0;font-size:0.95rem;line-height:1.5;}
+  .toggle-more{
+    margin-top:16px;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--gold);
+    font-family:var(--mono);
+    font-size:0.75rem;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    padding:8px 14px;
+    border-radius:20px;
+    cursor:pointer;
+    transition:all 0.15s;
+  }
+  .toggle-more:hover{border-color:var(--gold);background:rgba(214,169,74,0.08);}
 </style>
 </head>
 <body>
@@ -329,8 +344,10 @@ const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr_1_p67o6NmEq
 const COLUMNS = {
   title: ["titulo", "título", "title", "nombre", "pelicula", "película"],
   actors: ["actores", "actors", "reparto", "cast"],
+  mainActors: ["actores principales", "actores principales:", "main actors", "protagonistas", "reparto principal"],
   director: ["director", "directores"],
   year: ["año", "ano", "year"],
+  type: ["tipo", "type"],
   tags: ["tags", "etiquetas", "genero", "género", "genres"]
 };
 
@@ -354,6 +371,29 @@ function splitMulti(value){
   return value.split(/[,;/|]/).map(s => s.trim()).filter(Boolean);
 }
 
+// Orden fijo de los campos visibles por defecto en la ficha de detalle
+const FICHA_ORDER = [
+  "titulo", "título",
+  "año", "ano",
+  "tipo",
+  "tematica", "temática",
+  "genero", "género",
+  "actores",
+  "personajes",
+  "guion creadores", "guión creadores",
+  "tags"
+];
+
+// Campos que se muestran solo al expandir
+const FICHA_COLLAPSED = [
+  "nivel del vinculo", "nivel del vínculo",
+  "motivo"
+];
+
+function normalizeKey(k){
+  return k.trim().toLowerCase();
+}
+
 let allColumnKeys = []; // encabezados reales de la planilla, en orden
 
 function normalizeRows(rows){
@@ -369,16 +409,20 @@ function normalizeRows(rows){
   return rows.map((row, i) => {
     const title = keyMap.title ? row[keyMap.title] : (row[allColumnKeys[0]] || "Sin título");
     const actors = keyMap.actors ? splitMulti(row[keyMap.actors]) : [];
+    const mainActors = keyMap.mainActors ? splitMulti(row[keyMap.mainActors]) : [];
     const tags = keyMap.tags ? splitMulti(row[keyMap.tags]) : [];
     const director = keyMap.director ? row[keyMap.director] : "";
     const year = keyMap.year ? row[keyMap.year] : "";
+    const type = keyMap.type ? row[keyMap.type] : "";
     return {
       id: i,
       title: title || "Sin título",
       actors,
+      mainActors,
       tags,
       director: director || "",
       year: year || "",
+      type: type || "",
       raw: row // objeto completo con TODAS las columnas, para la búsqueda y la ficha
     };
   });
@@ -460,17 +504,18 @@ function renderResults(results, query){
     .sort((a,b) => (a.score ?? 0) - (b.score ?? 0))
     .forEach(({item, score}) => {
       const matchPct = query ? Math.round((1 - score) * 100) : null;
+      const scoreColor = matchPct !== null ? matchColor(matchPct) : null;
       const card = document.createElement("div");
       card.className = "card";
       card.addEventListener("click", () => openFicha(item));
       card.innerHTML = `
-        <div class="match-score">${matchPct !== null ? matchPct + "%" : "—"}</div>
+        <div class="match-score" style="${scoreColor ? `border-color:${scoreColor};color:${scoreColor};` : ""}">${matchPct !== null ? matchPct + "%" : "—"}</div>
         <div class="card-body">
           <p class="title">${escapeHtml(item.title)}</p>
           <div class="meta">
             ${item.year ? `<b>${escapeHtml(String(item.year))}</b> · ` : ""}
-            ${item.director ? escapeHtml(item.director) + " · " : ""}
-            ${item.actors.slice(0,3).map(escapeHtml).join(", ")}
+            ${item.type ? escapeHtml(item.type) + " · " : ""}
+            ${item.mainActors.length ? escapeHtml(item.mainActors.join(", ")) : item.actors.slice(0,3).map(escapeHtml).join(", ")}
           </div>
         </div>
         <div class="card-tags">
@@ -483,28 +528,70 @@ function renderResults(results, query){
 
 function openFicha(item){
   const content = document.getElementById("fichaContent");
-  const fields = Object.entries(item.raw)
-    .filter(([k, v]) => v !== null && v !== undefined && String(v).trim() !== "")
-    .map(([k, v]) => `
-      <div class="field">
-        <dt>${escapeHtml(k)}</dt>
-        <dd>${escapeHtml(String(v))}</dd>
-      </div>
-    `).join("");
+  const entries = Object.entries(item.raw)
+    .filter(([k, v]) => v !== null && v !== undefined && String(v).trim() !== "");
+
+  const visible = [];
+  const collapsed = [];
+  const rest = [];
+
+  entries.forEach(([k, v]) => {
+    const nk = normalizeKey(k);
+    if(FICHA_COLLAPSED.includes(nk)){
+      collapsed.push([k, v]);
+    } else if(FICHA_ORDER.includes(nk)){
+      visible.push([k, v]);
+    } else {
+      rest.push([k, v]);
+    }
+  });
+
+  // Ordenar 'visible' según la posición definida en FICHA_ORDER
+  visible.sort((a, b) => FICHA_ORDER.indexOf(normalizeKey(a[0])) - FICHA_ORDER.indexOf(normalizeKey(b[0])));
+
+  const renderField = ([k, v]) => `
+    <div class="field">
+      <dt>${escapeHtml(k)}</dt>
+      <dd>${escapeHtml(String(v))}</dd>
+    </div>
+  `;
+
+  const visibleHtml = [...visible, ...rest].map(renderField).join("");
+  const collapsedHtml = collapsed.map(renderField).join("");
 
   content.innerHTML = `
     <button class="close-btn" id="fichaClose" aria-label="Cerrar">✕</button>
     <h2>${escapeHtml(item.title)}</h2>
     <div class="ficha-sub">${[item.year, item.director].filter(Boolean).map(escapeHtml).join(" · ")}</div>
-    <dl>${fields}</dl>
+    <dl>${visibleHtml}</dl>
+    ${collapsed.length ? `
+      <button class="toggle-more" id="toggleMore">Mostrar más ▾</button>
+      <dl id="fichaCollapsed" style="display:none;">${collapsedHtml}</dl>
+    ` : ""}
   `;
 
   document.getElementById("overlay").classList.add("open");
   document.getElementById("fichaClose").addEventListener("click", closeFicha);
+
+  if(collapsed.length){
+    const toggleBtn = document.getElementById("toggleMore");
+    const collapsedBlock = document.getElementById("fichaCollapsed");
+    toggleBtn.addEventListener("click", () => {
+      const isOpen = collapsedBlock.style.display !== "none";
+      collapsedBlock.style.display = isOpen ? "none" : "block";
+      toggleBtn.textContent = isOpen ? "Mostrar más ▾" : "Mostrar menos ▴";
+    });
+  }
 }
 
 function closeFicha(){
   document.getElementById("overlay").classList.remove("open");
+}
+
+function matchColor(pct){
+  // 100% -> verde (hsl 120), 0% -> rojo (hsl 0), interpolación lineal
+  const hue = Math.max(0, Math.min(100, pct)) * 1.2;
+  return `hsl(${hue}, 65%, 50%)`;
 }
 
 function escapeHtml(str){
