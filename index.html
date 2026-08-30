@@ -124,18 +124,24 @@
 
   .results{display:flex;flex-direction:column;gap:2px;}
   .card{
-    display:grid;
-    grid-template-columns:56px 1fr auto;
-    gap:20px;
-    align-items:center;
-    padding:22px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    padding:20px;
     background:var(--panel);
     border:1px solid transparent;
     border-bottom:1px solid var(--line);
     transition:background 0.15s;
+    cursor:pointer;
   }
   .card:hover{background:var(--panel-2);}
   .card:first-child{border-top:1px solid var(--line);}
+
+  .card-header{
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
 
   .match-score{
     font-family:var(--mono);
@@ -148,6 +154,7 @@
     display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
+  .card-body{flex:1;min-width:0;}
   .card-body .title{
     font-size:1.25rem;
     margin:0 0 6px;
@@ -164,8 +171,7 @@
     display:flex;
     flex-wrap:wrap;
     gap:6px;
-    justify-content:flex-end;
-    max-width:280px;
+    justify-content:flex-start;
   }
   .card-tags span{
     font-family:var(--mono);
@@ -202,13 +208,6 @@
     line-height:1.6;
   }
   .config-note code{color:var(--gold);}
-
-  .card{cursor:pointer;}
-
-  @media (max-width:520px){
-    .card{grid-template-columns:40px 1fr;}
-    .card-tags{display:none;}
-  }
 
   /* Ficha (modal de detalle) */
   .overlay{
@@ -383,11 +382,15 @@ const FICHA_ORDER_GROUPS = [
   ["tags"]
 ];
 
-// Campos que van ocultos detrás de "Mostrar más"
-const FICHA_COLLAPSED_VARIANTS = [
-  "nivel del vinculo", "nivel de vinculo",
-  "motivo"
+// Grupos de variantes para los campos ocultos, en el orden en que deben mostrarse al expandir
+const FICHA_COLLAPSED_GROUPS = [
+  ["motivo del vinculo", "motivo"],
+  ["nivel del vinculo", "nivel de vinculo"]
 ];
+const FICHA_COLLAPSED_INDEX = new Map();
+FICHA_COLLAPSED_GROUPS.forEach((variants, idx) => {
+  variants.forEach(v => FICHA_COLLAPSED_INDEX.set(normalizeKey(v), idx));
+});
 
 // Mapa: variante normalizada -> posición de orden
 const FICHA_ORDER_INDEX = new Map();
@@ -521,17 +524,21 @@ function renderResults(results, query){
       card.className = "card";
       card.addEventListener("click", () => openFicha(item));
       card.innerHTML = `
-        <div class="match-score" style="${scoreColor ? `border-color:${scoreColor};color:${scoreColor};` : ""}">${matchPct !== null ? matchPct + "%" : "—"}</div>
-        <div class="card-body">
-          <p class="title">${escapeHtml(item.title)}</p>
-          <div class="meta">
-            <span class="meta-line">${item.year ? `<b>${escapeHtml(String(item.year))}</b>` : ""}${item.year && item.type ? " · " : ""}${item.type ? escapeHtml(item.type) : ""}</span>
-            ${(item.mainActors.length || item.actors.length) ? `<span class="meta-line">${escapeHtml((item.mainActors.length ? item.mainActors : item.actors).join(", "))}</span>` : ""}
+        <div class="card-header">
+          <div class="match-score" style="${scoreColor ? `border-color:${scoreColor};color:${scoreColor};` : ""}">${matchPct !== null ? matchPct + "%" : "—"}</div>
+          <div class="card-body">
+            <p class="title">${escapeHtml(item.title)}</p>
+            <div class="meta">
+              <span class="meta-line">${item.year ? `<b>${escapeHtml(String(item.year))}</b>` : ""}${item.year && item.type ? " · " : ""}${item.type ? escapeHtml(item.type) : ""}</span>
+              ${(item.mainActors.length || item.actors.length) ? `<span class="meta-line">${escapeHtml((item.mainActors.length ? item.mainActors : item.actors).join(", "))}</span>` : ""}
+            </div>
           </div>
         </div>
-        <div class="card-tags">
-          ${item.tags.map(t => `<span class="${activeTags.has(t) ? 'hit' : ''}">${escapeHtml(t)}</span>`).join("")}
-        </div>
+        ${item.tags.length ? `
+          <div class="card-tags">
+            ${item.tags.map(t => `<span class="${activeTags.has(t) ? 'hit' : ''}">${escapeHtml(t)}</span>`).join("")}
+          </div>
+        ` : ""}
       `;
       container.appendChild(card);
     });
@@ -548,7 +555,7 @@ function openFicha(item){
 
   entries.forEach(([k, v]) => {
     const nk = normalizeKey(k);
-    if(FICHA_COLLAPSED_VARIANTS.includes(nk)){
+    if(FICHA_COLLAPSED_INDEX.has(nk)){
       collapsed.push([k, v]);
     } else if(FICHA_ORDER_INDEX.has(nk)){
       visible.push([k, v]);
@@ -559,6 +566,8 @@ function openFicha(item){
 
   // Ordenar 'visible' según la posición definida en FICHA_ORDER_GROUPS
   visible.sort((a, b) => FICHA_ORDER_INDEX.get(normalizeKey(a[0])) - FICHA_ORDER_INDEX.get(normalizeKey(b[0])));
+  // Ordenar 'collapsed': Motivo del Vínculo antes que Nivel de Vínculo
+  collapsed.sort((a, b) => FICHA_COLLAPSED_INDEX.get(normalizeKey(a[0])) - FICHA_COLLAPSED_INDEX.get(normalizeKey(b[0])));
 
   const renderField = ([k, v]) => `
     <div class="field">
