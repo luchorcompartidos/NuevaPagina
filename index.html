@@ -122,6 +122,33 @@
   }
   .status.err{color:#c47a5a;}
 
+  .sort-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .sort-row label{
+    font-family:var(--mono);
+    font-size:0.7rem;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--ink-dim);
+  }
+  .sort-row select{
+    flex:0 0 auto;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:0.8rem;
+    padding:8px 12px;
+    border-radius:2px;
+    outline:none;
+    cursor:pointer;
+  }
+  .sort-row select:focus{border-color:var(--gold-dim);}
+
   .results{display:flex;flex-direction:column;gap:2px;}
   .card{
     display:flex;
@@ -320,6 +347,18 @@
   </div>
 
   <div class="status" id="status"></div>
+
+  <div class="sort-row">
+    <label for="sortSelect">Ordenar por</label>
+    <select id="sortSelect">
+      <option value="relevance">Coincidencia (%)</option>
+      <option value="title_asc">Título (A → Z)</option>
+      <option value="title_desc">Título (Z → A)</option>
+      <option value="year_desc">Año (más reciente primero)</option>
+      <option value="year_asc">Año (más antiguo primero)</option>
+    </select>
+  </div>
+
   <div class="results" id="results"></div>
 
 </div>
@@ -366,6 +405,7 @@ const COLUMNS = {
   director: ["director", "directores"],
   year: ["año", "ano", "year"],
   type: ["tipo", "type"],
+  platform: ["plataforma", "platform", "servicio"],
   tags: ["tags", "etiquetas", "genero", "género", "genres"]
 };
 
@@ -403,6 +443,42 @@ FICHA_ORDER_GROUPS.forEach((variants, idx) => {
 let allMovies = [];
 let fuse = null;
 let activeTags = new Set();
+let sortMode = "relevance";
+
+const LEADING_ARTICLES = ["the", "el", "la", "los", "las"];
+function titleSortKey(title){
+  const words = String(title).trim().split(/\s+/);
+  if(words.length > 1 && LEADING_ARTICLES.includes(normalizeKey(words[0]))){
+    return words.slice(1).join(" ").toLowerCase();
+  }
+  return String(title).trim().toLowerCase();
+}
+
+function parseYear(y){
+  const n = parseInt(String(y).match(/\d{4}/)?.[0] ?? y, 10);
+  return isNaN(n) ? null : n;
+}
+
+function applySort(results){
+  const sorted = [...results];
+  switch(sortMode){
+    case "title_asc":
+      sorted.sort((a,b) => titleSortKey(a.item.title).localeCompare(titleSortKey(b.item.title), "es"));
+      break;
+    case "title_desc":
+      sorted.sort((a,b) => titleSortKey(b.item.title).localeCompare(titleSortKey(a.item.title), "es"));
+      break;
+    case "year_desc":
+      sorted.sort((a,b) => (parseYear(b.item.year) ?? -Infinity) - (parseYear(a.item.year) ?? -Infinity));
+      break;
+    case "year_asc":
+      sorted.sort((a,b) => (parseYear(a.item.year) ?? Infinity) - (parseYear(b.item.year) ?? Infinity));
+      break;
+    default: // relevance
+      sorted.sort((a,b) => (a.score ?? 0) - (b.score ?? 0));
+  }
+  return sorted;
+}
 
 function splitMulti(value){
   if(!value) return [];
@@ -429,6 +505,7 @@ function normalizeRows(rows){
     const director = keyMap.director ? row[keyMap.director] : "";
     const year = keyMap.year ? row[keyMap.year] : "";
     const type = keyMap.type ? row[keyMap.type] : "";
+    const platform = keyMap.platform ? row[keyMap.platform] : "";
     return {
       id: i,
       title: title || "Sin título",
@@ -438,6 +515,7 @@ function normalizeRows(rows){
       director: director || "",
       year: year || "",
       type: type || "",
+      platform: platform || "",
       raw: row // objeto completo con TODAS las columnas, para la búsqueda y la ficha
     };
   });
@@ -515,8 +593,7 @@ function renderResults(results, query){
     return;
   }
 
-  results
-    .sort((a,b) => (a.score ?? 0) - (b.score ?? 0))
+  applySort(results)
     .forEach(({item, score}) => {
       const matchPct = query ? Math.round((1 - score) * 100) : null;
       const scoreColor = matchPct !== null ? matchColor(matchPct) : null;
@@ -529,7 +606,7 @@ function renderResults(results, query){
           <div class="card-body">
             <p class="title">${escapeHtml(item.title)}</p>
             <div class="meta">
-              <span class="meta-line">${item.year ? `<b>${escapeHtml(String(item.year))}</b>` : ""}${item.year && item.type ? " · " : ""}${item.type ? escapeHtml(item.type) : ""}</span>
+              <span class="meta-line">${item.year ? `<b>${escapeHtml(String(item.year))}</b>` : ""}${item.year && item.type ? " · " : ""}${item.type ? escapeHtml(item.type) : ""}${item.platform ? ` · ${escapeHtml(item.platform)}` : ""}</span>
               ${(item.mainActors.length || item.actors.length) ? `<span class="meta-line">${escapeHtml((item.mainActors.length ? item.mainActors : item.actors).join(", "))}</span>` : ""}
             </div>
           </div>
@@ -652,6 +729,11 @@ function loadData(){
 }
 
 document.getElementById("searchInput").addEventListener("input", () => {
+  runSearch();
+});
+
+document.getElementById("sortSelect").addEventListener("change", (e) => {
+  sortMode = e.target.value;
   runSearch();
 });
 
