@@ -126,9 +126,9 @@
   .card{
     display:grid;
     grid-template-columns:56px 1fr auto;
-    gap:16px;
+    gap:20px;
     align-items:center;
-    padding:16px;
+    padding:22px 20px;
     background:var(--panel);
     border:1px solid transparent;
     border-bottom:1px solid var(--line);
@@ -146,24 +146,26 @@
     border-radius:50%;
     width:44px;height:44px;
     display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
   }
   .card-body .title{
-    font-size:1.15rem;
-    margin:0 0 4px;
+    font-size:1.25rem;
+    margin:0 0 6px;
   }
   .card-body .meta{
     font-family:var(--mono);
-    font-size:0.75rem;
+    font-size:0.8rem;
     color:var(--ink-dim);
-    line-height:1.6;
+    line-height:1.9;
   }
   .card-body .meta b{color:var(--ink);font-weight:500;}
+  .card-body .meta .meta-line{display:block;}
   .card-tags{
     display:flex;
     flex-wrap:wrap;
     gap:6px;
     justify-content:flex-end;
-    max-width:220px;
+    max-width:280px;
   }
   .card-tags span{
     font-family:var(--mono);
@@ -341,15 +343,57 @@ const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr_1_p67o6NmEq
 
 /* Nombres de columnas esperados en tu planilla (ajustá si los tuyos
    se llaman distinto). No hace falta que existan todas. */
+function normalizeKey(k){
+  return k
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // saca tildes
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ") // saca "/", puntuación, etc.
+    .trim();
+}
+
+function findKey(row, aliases){
+  const keys = Object.keys(row);
+  for(const alias of aliases){
+    const found = keys.find(k => normalizeKey(k) === normalizeKey(alias));
+    if(found) return found;
+  }
+  return null;
+}
+
 const COLUMNS = {
-  title: ["titulo", "título", "title", "nombre", "pelicula", "película"],
+  title: ["titulo", "title", "nombre", "pelicula"],
   actors: ["actores", "actors", "reparto", "cast"],
-  mainActors: ["actores principales", "actores principales:", "main actors", "protagonistas", "reparto principal"],
+  mainActors: ["actores principales", "actores vinculados", "main actors", "protagonistas", "reparto principal"],
   director: ["director", "directores"],
   year: ["año", "ano", "year"],
   type: ["tipo", "type"],
   tags: ["tags", "etiquetas", "genero", "género", "genres"]
 };
+
+// Grupos de variantes aceptadas para cada posición fija en la ficha de detalle
+const FICHA_ORDER_GROUPS = [
+  ["titulo"],
+  ["año", "ano"],
+  ["tipo"],
+  ["tematica"],
+  ["genero"],
+  ["actores vinculados", "actores"],
+  ["personajes vinculados", "personajes"],
+  ["guion creadores vinculados", "guion creadores", "guion y creadores vinculados"],
+  ["tags"]
+];
+
+// Campos que van ocultos detrás de "Mostrar más"
+const FICHA_COLLAPSED_VARIANTS = [
+  "nivel del vinculo", "nivel de vinculo",
+  "motivo"
+];
+
+// Mapa: variante normalizada -> posición de orden
+const FICHA_ORDER_INDEX = new Map();
+FICHA_ORDER_GROUPS.forEach((variants, idx) => {
+  variants.forEach(v => FICHA_ORDER_INDEX.set(normalizeKey(v), idx));
+});
 
 /* ===================================================================== */
 
@@ -357,41 +401,9 @@ let allMovies = [];
 let fuse = null;
 let activeTags = new Set();
 
-function findKey(row, aliases){
-  const keys = Object.keys(row);
-  for(const alias of aliases){
-    const found = keys.find(k => k.trim().toLowerCase() === alias);
-    if(found) return found;
-  }
-  return null;
-}
-
 function splitMulti(value){
   if(!value) return [];
   return value.split(/[,;/|]/).map(s => s.trim()).filter(Boolean);
-}
-
-// Orden fijo de los campos visibles por defecto en la ficha de detalle
-const FICHA_ORDER = [
-  "titulo", "título",
-  "año", "ano",
-  "tipo",
-  "tematica", "temática",
-  "genero", "género",
-  "actores",
-  "personajes",
-  "guion creadores", "guión creadores",
-  "tags"
-];
-
-// Campos que se muestran solo al expandir
-const FICHA_COLLAPSED = [
-  "nivel del vinculo", "nivel del vínculo",
-  "motivo"
-];
-
-function normalizeKey(k){
-  return k.trim().toLowerCase();
 }
 
 let allColumnKeys = []; // encabezados reales de la planilla, en orden
@@ -513,9 +525,8 @@ function renderResults(results, query){
         <div class="card-body">
           <p class="title">${escapeHtml(item.title)}</p>
           <div class="meta">
-            ${item.year ? `<b>${escapeHtml(String(item.year))}</b> · ` : ""}
-            ${item.type ? escapeHtml(item.type) + " · " : ""}
-            ${item.mainActors.length ? escapeHtml(item.mainActors.join(", ")) : item.actors.slice(0,3).map(escapeHtml).join(", ")}
+            <span class="meta-line">${item.year ? `<b>${escapeHtml(String(item.year))}</b>` : ""}${item.year && item.type ? " · " : ""}${item.type ? escapeHtml(item.type) : ""}</span>
+            ${(item.mainActors.length || item.actors.length) ? `<span class="meta-line">${escapeHtml((item.mainActors.length ? item.mainActors : item.actors).join(", "))}</span>` : ""}
           </div>
         </div>
         <div class="card-tags">
@@ -537,17 +548,17 @@ function openFicha(item){
 
   entries.forEach(([k, v]) => {
     const nk = normalizeKey(k);
-    if(FICHA_COLLAPSED.includes(nk)){
+    if(FICHA_COLLAPSED_VARIANTS.includes(nk)){
       collapsed.push([k, v]);
-    } else if(FICHA_ORDER.includes(nk)){
+    } else if(FICHA_ORDER_INDEX.has(nk)){
       visible.push([k, v]);
     } else {
       rest.push([k, v]);
     }
   });
 
-  // Ordenar 'visible' según la posición definida en FICHA_ORDER
-  visible.sort((a, b) => FICHA_ORDER.indexOf(normalizeKey(a[0])) - FICHA_ORDER.indexOf(normalizeKey(b[0])));
+  // Ordenar 'visible' según la posición definida en FICHA_ORDER_GROUPS
+  visible.sort((a, b) => FICHA_ORDER_INDEX.get(normalizeKey(a[0])) - FICHA_ORDER_INDEX.get(normalizeKey(b[0])));
 
   const renderField = ([k, v]) => `
     <div class="field">
