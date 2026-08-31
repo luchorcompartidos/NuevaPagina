@@ -92,6 +92,55 @@
     color:var(--ink-dim);
     margin-bottom:10px;
   }
+  .tags-panel .label-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .tags-panel .label-row .label{margin-bottom:0;}
+  .clear-btn{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    color:var(--ink-dim);
+    background:transparent;
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:4px 10px;
+    cursor:pointer;
+    transition:all 0.15s;
+  }
+  .clear-btn:hover{border-color:var(--wine);color:#c47a5a;}
+  .clear-btn:disabled{opacity:0.4;cursor:default;}
+  .clear-btn:disabled:hover{border-color:var(--line);color:var(--ink-dim);}
+
+  .tag-search-input{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:0.8rem;
+    padding:9px 12px;
+    border-radius:2px;
+    outline:none;
+    margin-bottom:8px;
+  }
+  .tag-search-input:focus{border-color:var(--gold-dim);}
+  .tag-search-input::placeholder{color:var(--ink-dim);}
+
+  .tag-suggestions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    padding-bottom:10px;
+    margin-bottom:8px;
+    border-bottom:1px dashed var(--line);
+  }
+  .tag-suggestions:empty{display:none;border-bottom:none;margin-bottom:0;padding-bottom:0;}
+
   .tag-chips{display:flex;flex-wrap:wrap;gap:8px;}
   .chip{
     font-family:var(--mono);
@@ -347,7 +396,12 @@
   </div>
 
   <div class="tags-panel">
-    <div class="label">Filtrar por tag</div>
+    <div class="label-row">
+      <div class="label">Filtrar por tag</div>
+      <button class="clear-btn" id="clearTagsBtn" disabled>Limpiar selección</button>
+    </div>
+    <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar tag (2+ caracteres)…" autocomplete="off">
+    <div class="tag-suggestions" id="tagSuggestions"></div>
     <div class="tag-chips" id="tagChips"></div>
   </div>
 
@@ -542,27 +596,58 @@ function buildFuse(movies){
   });
 }
 
-function renderTagChips(movies){
+let allTagsSorted = [];
+
+function computeTagList(movies){
   const tagSet = new Set();
   movies.forEach(m => m.tags.forEach(t => tagSet.add(t)));
+  allTagsSorted = [...tagSet].sort((a,b) => a.localeCompare(b, "es"));
+}
+
+function toggleTag(tag){
+  if(activeTags.has(tag)) activeTags.delete(tag);
+  else activeTags.add(tag);
+  renderTagChips();
+  renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
+  updateClearTagsBtn();
+  runSearch();
+}
+
+function updateClearTagsBtn(){
+  document.getElementById("clearTagsBtn").disabled = activeTags.size === 0;
+}
+
+function makeTagChip(tag){
+  const chip = document.createElement("button");
+  chip.className = "chip" + (activeTags.has(tag) ? " active" : "");
+  chip.textContent = tag;
+  chip.onclick = () => toggleTag(tag);
+  return chip;
+}
+
+function renderTagChips(){
   const container = document.getElementById("tagChips");
   container.innerHTML = "";
-  if(tagSet.size === 0){
+  if(allTagsSorted.length === 0){
     container.innerHTML = '<span style="font-family:var(--mono);font-size:0.75rem;color:var(--ink-dim)">No se detectaron tags en la planilla.</span>';
     return;
   }
-  [...tagSet].sort().forEach(tag => {
-    const chip = document.createElement("button");
-    chip.className = "chip";
-    chip.textContent = tag;
-    chip.onclick = () => {
-      if(activeTags.has(tag)) activeTags.delete(tag);
-      else activeTags.add(tag);
-      chip.classList.toggle("active");
-      runSearch();
-    };
-    container.appendChild(chip);
-  });
+  allTagsSorted.forEach(tag => container.appendChild(makeTagChip(tag)));
+}
+
+function renderTagSuggestions(query){
+  const container = document.getElementById("tagSuggestions");
+  container.innerHTML = "";
+  if(query.length < 2) return;
+
+  const nq = normalizeKey(query);
+  const matches = allTagsSorted.filter(t => normalizeKey(t).includes(nq));
+
+  if(matches.length === 0){
+    container.innerHTML = '<span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-dim)">Sin coincidencias.</span>';
+    return;
+  }
+  matches.forEach(tag => container.appendChild(makeTagChip(tag)));
 }
 
 function renderPlatformChips(movies){
@@ -756,7 +841,8 @@ function loadData(){
       countLabel.textContent = `${allMovies.length} películas`;
       document.getElementById("configNote").style.display = "none";
       renderPlatformChips(allMovies);
-      renderTagChips(allMovies);
+      computeTagList(allMovies);
+      renderTagChips();
       runSearch();
     },
     error: function(err){
@@ -773,6 +859,19 @@ document.getElementById("searchInput").addEventListener("input", () => {
 
 document.getElementById("sortSelect").addEventListener("change", (e) => {
   sortMode = e.target.value;
+  runSearch();
+});
+
+document.getElementById("tagSearchInput").addEventListener("input", (e) => {
+  renderTagSuggestions(e.target.value.trim());
+});
+
+document.getElementById("clearTagsBtn").addEventListener("click", () => {
+  if(activeTags.size === 0) return;
+  activeTags.clear();
+  renderTagChips();
+  renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
+  updateClearTagsBtn();
   runSearch();
 });
 
