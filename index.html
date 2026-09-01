@@ -123,13 +123,39 @@
     color:var(--ink);
     font-family:var(--mono);
     font-size:0.8rem;
-    padding:9px 12px;
+    padding:9px 34px 9px 12px;
     border-radius:2px;
     outline:none;
-    margin-bottom:8px;
   }
   .tag-search-input:focus{border-color:var(--gold-dim);}
   .tag-search-input::placeholder{color:var(--ink-dim);}
+
+  .tag-search-wrap{
+    position:relative;
+    margin-bottom:8px;
+  }
+  .tag-search-clear{
+    position:absolute;
+    right:8px;
+    top:50%;
+    transform:translateY(-50%);
+    background:transparent;
+    border:none;
+    color:var(--ink-dim);
+    font-family:var(--mono);
+    font-size:0.85rem;
+    cursor:pointer;
+    padding:4px 6px;
+    line-height:1;
+  }
+  .tag-search-clear:hover{color:var(--gold);}
+
+  .tag-chips-selected{
+    padding-bottom:10px;
+    margin-bottom:8px;
+    border-bottom:1px dashed var(--line);
+  }
+  .tag-chips-selected:empty{display:none;border-bottom:none;margin-bottom:0;padding-bottom:0;}
 
   .tag-suggestions{
     display:flex;
@@ -396,12 +422,21 @@
   </div>
 
   <div class="tags-panel">
+    <div class="label">Filtrar por tipo</div>
+    <div class="tag-chips" id="typeChips"></div>
+  </div>
+
+  <div class="tags-panel">
     <div class="label-row">
       <div class="label">Filtrar por tag</div>
       <button class="clear-btn" id="clearTagsBtn" disabled>Limpiar selección</button>
     </div>
-    <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar tag (2+ caracteres)…" autocomplete="off">
+    <div class="tag-search-wrap">
+      <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar tag (2+ caracteres)…" autocomplete="off">
+      <button class="tag-search-clear" id="tagSearchClear" aria-label="Borrar búsqueda" style="display:none;">✕</button>
+    </div>
     <div class="tag-suggestions" id="tagSuggestions"></div>
+    <div class="tag-chips tag-chips-selected" id="tagSelectedChips"></div>
     <div class="tag-chips" id="tagChips"></div>
   </div>
 
@@ -503,6 +538,7 @@ let allMovies = [];
 let fuse = null;
 let activeTags = new Set();
 let activePlatforms = new Set();
+let activeTypes = new Set();
 let sortMode = "relevance";
 
 const LEADING_ARTICLES = ["the", "el", "la", "los", "las"];
@@ -608,6 +644,7 @@ function toggleTag(tag){
   if(activeTags.has(tag)) activeTags.delete(tag);
   else activeTags.add(tag);
   renderTagChips();
+  renderSelectedTagChips();
   renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
   updateClearTagsBtn();
   runSearch();
@@ -633,6 +670,15 @@ function renderTagChips(){
     return;
   }
   allTagsSorted.forEach(tag => container.appendChild(makeTagChip(tag)));
+}
+
+function renderSelectedTagChips(){
+  const container = document.getElementById("tagSelectedChips");
+  container.innerHTML = "";
+  // Uno a continuación del otro, en el mismo orden que la lista completa
+  allTagsSorted
+    .filter(tag => activeTags.has(tag))
+    .forEach(tag => container.appendChild(makeTagChip(tag)));
 }
 
 function renderTagSuggestions(query){
@@ -673,6 +719,29 @@ function renderPlatformChips(movies){
   });
 }
 
+function renderTypeChips(movies){
+  const typeSet = new Set();
+  movies.forEach(m => { if(m.type) typeSet.add(m.type); });
+  const container = document.getElementById("typeChips");
+  container.innerHTML = "";
+  if(typeSet.size === 0){
+    container.innerHTML = '<span style="font-family:var(--mono);font-size:0.75rem;color:var(--ink-dim)">No se detectó la columna Tipo en la planilla.</span>';
+    return;
+  }
+  [...typeSet].sort().forEach(type => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = type;
+    chip.onclick = () => {
+      if(activeTypes.has(type)) activeTypes.delete(type);
+      else activeTypes.add(type);
+      chip.classList.toggle("active");
+      runSearch();
+    };
+    container.appendChild(chip);
+  });
+}
+
 function runSearch(){
   const query = document.getElementById("searchInput").value.trim();
   let candidates = allMovies;
@@ -688,6 +757,11 @@ function runSearch(){
     candidates = candidates.filter(m =>
       m.platforms.some(p => activePlatforms.has(p))
     );
+  }
+
+  // Filtro por tipo: OR entre los seleccionados
+  if(activeTypes.size > 0){
+    candidates = candidates.filter(m => activeTypes.has(m.type));
   }
 
   let results;
@@ -708,7 +782,7 @@ function renderResults(results, query){
 
   status.textContent = query
     ? `${results.length} resultado(s) para "${query}"`
-    : `${results.length} película(s) en la base`;
+    : `${results.length} ítem(s) cinematográfico(s) con coincidencia`;
   status.classList.remove("err");
 
   if(results.length === 0){
@@ -841,6 +915,7 @@ function loadData(){
       countLabel.textContent = `${allMovies.length} películas`;
       document.getElementById("configNote").style.display = "none";
       renderPlatformChips(allMovies);
+      renderTypeChips(allMovies);
       computeTagList(allMovies);
       renderTagChips();
       runSearch();
@@ -863,13 +938,24 @@ document.getElementById("sortSelect").addEventListener("change", (e) => {
 });
 
 document.getElementById("tagSearchInput").addEventListener("input", (e) => {
-  renderTagSuggestions(e.target.value.trim());
+  const value = e.target.value;
+  document.getElementById("tagSearchClear").style.display = value.length ? "block" : "none";
+  renderTagSuggestions(value.trim());
+});
+
+document.getElementById("tagSearchClear").addEventListener("click", () => {
+  const input = document.getElementById("tagSearchInput");
+  input.value = "";
+  document.getElementById("tagSearchClear").style.display = "none";
+  renderTagSuggestions("");
+  input.focus();
 });
 
 document.getElementById("clearTagsBtn").addEventListener("click", () => {
   if(activeTags.size === 0) return;
   activeTags.clear();
   renderTagChips();
+  renderSelectedTagChips();
   renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
   updateClearTagsBtn();
   runSearch();
