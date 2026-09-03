@@ -57,6 +57,27 @@
     text-transform:uppercase;
   }
 
+  .section-block{
+    border:1px solid var(--line);
+    border-radius:2px;
+    padding:18px 18px 6px;
+    margin-bottom:24px;
+    background:rgba(255,255,255,0.012);
+  }
+  .section-header{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--gold);
+    margin-bottom:14px;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .section-block .search-row{margin-bottom:6px;}
+  .section-block .tags-panel:last-child{margin-bottom:6px;}
+
   .search-row{
     display:flex;
     gap:10px;
@@ -196,6 +217,41 @@
     min-height:1.2em;
   }
   .status.err{color:#c47a5a;}
+
+  .query-summary:empty{display:none;}
+  .qs-line{
+    font-family:var(--mono);
+    font-size:0.68rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--ink-dim);
+    margin-bottom:3px;
+  }
+  .qs-value{
+    font-family:var(--mono);
+    font-size:0.9rem;
+    color:var(--gold);
+    margin-bottom:14px;
+    word-break:break-word;
+  }
+  .qs-tags-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:16px;
+  }
+  .qs-tag{
+    font-family:var(--mono);
+    font-size:0.66rem;
+    padding:3px 9px;
+    background:var(--panel-2);
+    color:var(--gold);
+    border:1px solid var(--gold-dim);
+    border-radius:12px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+    white-space:nowrap;
+  }
 
   .sort-row{
     display:flex;
@@ -412,35 +468,44 @@
     Fuente de datos: editá la constante <code>CSV_URL</code> al final del archivo con el link "Publicar en la web → CSV" de tu Google Sheet.
   </div>
 
-  <div class="search-row">
-    <input type="text" id="searchInput" placeholder="Buscar por título, actor, director…" autocomplete="off">
-  </div>
-
-  <div class="tags-panel">
-    <div class="label">Filtrar por plataforma</div>
-    <div class="tag-chips" id="platformChips"></div>
-  </div>
-
-  <div class="tags-panel">
-    <div class="label">Filtrar por tipo</div>
-    <div class="tag-chips" id="typeChips"></div>
-  </div>
-
-  <div class="tags-panel">
-    <div class="label-row">
-      <div class="label">Filtrar por tag</div>
-      <button class="clear-btn" id="clearTagsBtn" disabled>Limpiar selección</button>
+  <div class="section-block">
+    <div class="section-header">Búsqueda:</div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Buscar por título, actor, director…" autocomplete="off">
     </div>
-    <div class="tag-search-wrap">
-      <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar tag (2+ caracteres)…" autocomplete="off">
-      <button class="tag-search-clear" id="tagSearchClear" aria-label="Borrar búsqueda" style="display:none;">✕</button>
+  </div>
+
+  <div class="section-block">
+    <div class="section-header">Filtros (Plataforma, Tipo de Contenido, Etiquetas/Tags, etc.):</div>
+
+    <div class="tags-panel">
+      <div class="label">Filtrar por plataforma</div>
+      <div class="tag-chips" id="platformChips"></div>
     </div>
-    <div class="tag-suggestions" id="tagSuggestions"></div>
-    <div class="tag-chips tag-chips-selected" id="tagSelectedChips"></div>
-    <div class="tag-chips" id="tagChips"></div>
+
+    <div class="tags-panel">
+      <div class="label">Filtrar por tipo</div>
+      <div class="tag-chips" id="typeChips"></div>
+    </div>
+
+    <div class="tags-panel">
+      <div class="label-row">
+        <div class="label">Filtrar por tag</div>
+        <button class="clear-btn" id="clearTagsBtn" disabled>Limpiar selección</button>
+      </div>
+      <div class="tag-search-wrap">
+        <input type="text" class="tag-search-input" id="tagSearchInput" placeholder="Buscar tag (2+ caracteres)…" autocomplete="off">
+        <button class="tag-search-clear" id="tagSearchClear" aria-label="Borrar búsqueda" style="display:none;">✕</button>
+      </div>
+      <div class="tag-suggestions" id="tagSuggestions"></div>
+      <div class="tag-chips tag-chips-selected" id="tagSelectedChips"></div>
+      <div class="tag-chips" id="tagChips"></div>
+    </div>
   </div>
 
   <div class="status" id="status"></div>
+
+  <div class="query-summary" id="querySummary"></div>
 
   <div class="sort-row">
     <label for="sortSelect">Ordenar por</label>
@@ -746,12 +811,6 @@ function runSearch(){
   const query = document.getElementById("searchInput").value.trim();
   let candidates = allMovies;
 
-  if(activeTags.size > 0){
-    candidates = candidates.filter(m =>
-      [...activeTags].every(tag => m.tags.includes(tag))
-    );
-  }
-
   // Filtro por plataforma: OR entre las seleccionadas (alcanza con matchear una)
   if(activePlatforms.size > 0){
     candidates = candidates.filter(m =>
@@ -765,17 +824,64 @@ function runSearch(){
   }
 
   let results;
+  let showPercentWithoutQuery = false;
+
   if(query.length === 0){
-    results = candidates.map(m => ({ item: m, score: 0 }));
+    if(activeTags.size === 0){
+      // Sin texto y sin tags: comportamiento actual, sin indicador de %
+      results = candidates.map(m => ({ item: m, score: 0 }));
+    } else {
+      // Sin texto, con tags: % de coincidencia = tags matcheados / tags seleccionados.
+      // Coincidencia parcial permitida (no exige matchear TODOS los tags).
+      showPercentWithoutQuery = true;
+      results = candidates
+        .map(m => {
+          const matchedCount = [...activeTags].filter(tag => m.tags.includes(tag)).length;
+          return { item: m, matchedCount };
+        })
+        .filter(r => r.matchedCount > 0)
+        .map(r => ({ item: r.item, score: 1 - (r.matchedCount / activeTags.size) }));
+    }
   } else {
+    // Con texto: se mantiene el comportamiento actual (tags exige coincidir con TODOS)
+    if(activeTags.size > 0){
+      candidates = candidates.filter(m =>
+        [...activeTags].every(tag => m.tags.includes(tag))
+      );
+    }
     const localFuse = buildFuse(candidates);
     results = localFuse.search(query);
   }
 
-  renderResults(results, query);
+  renderResults(results, query, showPercentWithoutQuery);
 }
 
-function renderResults(results, query){
+function renderQuerySummary(query){
+  const container = document.getElementById("querySummary");
+  let html = "";
+
+  if(query){
+    html += `
+      <div class="qs-line">Texto buscado:</div>
+      <div class="qs-value">"${escapeHtml(query)}"</div>
+    `;
+  }
+
+  if(activeTags.size > 0){
+    const tagsHtml = [...activeTags]
+      .sort((a,b) => a.localeCompare(b, "es"))
+      .map(t => `<span class="qs-tag">${escapeHtml(t)}</span>`)
+      .join("");
+    html += `
+      <div class="qs-line">Tags seleccionados:</div>
+      <div class="qs-tags-row">${tagsHtml}</div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderResults(results, query, showPercentWithoutQuery){
   const container = document.getElementById("results");
   const status = document.getElementById("status");
   container.innerHTML = "";
@@ -785,6 +891,8 @@ function renderResults(results, query){
     : `${results.length} ítem(s) cinematográfico(s) con coincidencia`;
   status.classList.remove("err");
 
+  renderQuerySummary(query);
+
   if(results.length === 0){
     container.innerHTML = '<div class="empty">No se encontraron coincidencias. Probá con otro término o quitá filtros.</div>';
     return;
@@ -792,7 +900,7 @@ function renderResults(results, query){
 
   applySort(results)
     .forEach(({item, score}) => {
-      const matchPct = query ? Math.round((1 - score) * 100) : null;
+      const matchPct = (query || showPercentWithoutQuery) ? Math.round((1 - score) * 100) : null;
       const scoreColor = matchPct !== null ? matchColor(matchPct) : null;
       const card = document.createElement("div");
       card.className = "card";
@@ -912,7 +1020,7 @@ function loadData(){
     complete: function(res){
       allMovies = normalizeRows(res.data);
       fuse = buildFuse(allMovies);
-      countLabel.textContent = `${allMovies.length} películas`;
+      countLabel.textContent = `${allMovies.length} Títulos`;
       document.getElementById("configNote").style.display = "none";
       renderPlatformChips(allMovies);
       renderTypeChips(allMovies);
