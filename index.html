@@ -18,6 +18,7 @@
     --mono: 'JetBrains Mono', 'Courier New', monospace;
   }
   *{box-sizing:border-box;}
+  html{font-size:17px;} /* +1pt aprox. sobre el tamaño base, afecta todo el texto en rem */
   body{
     margin:0;
     background:
@@ -40,7 +41,7 @@
     gap:8px;
   }
   h1{
-    font-size:2rem;
+    font-size:32px; /* fijo en px: se excluye del aumento general de +1pt */
     letter-spacing:0.02em;
     margin:0;
     font-weight:400;
@@ -67,7 +68,7 @@
   .section-header{
     font-family:var(--mono);
     font-size:0.72rem;
-    font-weight:600;
+    font-weight:500;
     text-transform:uppercase;
     letter-spacing:0.08em;
     color:var(--gold);
@@ -75,6 +76,7 @@
     padding-bottom:10px;
     border-bottom:1px solid var(--line);
   }
+  .section-header strong{font-weight:700;}
   .section-block .search-row{margin-bottom:6px;}
   .section-block .tags-panel:last-child{margin-bottom:6px;}
 
@@ -112,6 +114,13 @@
     letter-spacing:0.08em;
     color:var(--ink-dim);
     margin-bottom:10px;
+  }
+  .label-sentence{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    letter-spacing:0.03em;
+    color:var(--ink-dim);
+    margin-bottom:8px;
   }
   .tags-panel .label-row{
     display:flex;
@@ -172,9 +181,9 @@
   .tag-search-clear:hover{color:var(--gold);}
 
   .tag-chips-selected{
-    padding-bottom:10px;
+    padding-bottom:18px;
     margin-top:6px;
-    margin-bottom:8px;
+    margin-bottom:16px;
     border-bottom:1px dashed var(--line);
   }
   .tag-chips-selected:empty{display:none;border-bottom:none;margin-top:0;margin-bottom:0;padding-bottom:0;}
@@ -222,8 +231,8 @@
   .chip.active{
     background:var(--gold);
     border-color:var(--gold);
-    color:#100d07;
-    font-weight:700;
+    color:#000000;
+    font-weight:750;
     letter-spacing:0.015em;
   }
 
@@ -235,6 +244,7 @@
     min-height:1.2em;
   }
   .status.err{color:#c47a5a;}
+  .status.status-highlight{color:var(--gold);}
 
   .query-summary:empty{display:none;}
   .qs-line-row{
@@ -388,7 +398,7 @@
   }
   .card-body{flex:1;min-width:0;}
   .card-body .title{
-    font-size:1.25rem;
+    font-size:20px; /* fijo en px: se excluye del aumento general de +1pt, igual que el título de la app */
     margin:0 0 6px;
   }
   .card-body .meta{
@@ -543,14 +553,14 @@
   </div>
 
   <div class="section-block">
-    <div class="section-header">Búsqueda:</div>
+    <div class="section-header"><strong>Búsqueda:</strong></div>
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Buscar por título, actor, director…" autocomplete="off">
     </div>
   </div>
 
   <div class="section-block">
-    <div class="section-header">Filtros (Plataforma, Tipo de Contenido, Etiquetas/Tags, etc.):</div>
+    <div class="section-header"><strong>Filtros</strong> (Plataforma, Tipo de Contenido, Etiquetas/Tags, etc.):</div>
 
     <div class="tags-panel">
       <div class="label">Filtrar por plataforma</div>
@@ -572,7 +582,9 @@
         <button class="tag-search-clear" id="tagSearchClear" aria-label="Borrar búsqueda" style="display:none;">✕</button>
       </div>
       <div class="tag-suggestions" id="tagSuggestions"></div>
+      <div class="label-sentence" id="filteringByLabel" style="display:none;">Filtrando por:</div>
       <div class="tag-chips tag-chips-selected" id="tagSelectedChips"></div>
+      <div class="label" id="tagsAvailableLabel">SELECCIÓN DE TAGS</div>
       <div class="tag-chips" id="tagChips"></div>
       <button class="tags-more-btn" id="tagsShowMoreBtn" style="display:none;">Mostrar más…</button>
     </div>
@@ -876,6 +888,7 @@ function renderSelectedTagChips(){
   allTagsSorted
     .filter(tag => activeTags.has(tag))
     .forEach(tag => container.appendChild(makeTagChip(tag)));
+  document.getElementById("filteringByLabel").style.display = activeTags.size > 0 ? "block" : "none";
 }
 
 function renderTagSuggestions(query){
@@ -1079,6 +1092,7 @@ function renderResults(results, query, showPercentWithoutQuery){
     ? `${results.length} resultado(s) para "${query}"`
     : `${results.length} ítem(s) cinematográfico(s) con coincidencia`;
   status.classList.remove("err");
+  status.classList.toggle("status-highlight", !query);
 
   renderQuerySummary(query);
   renderFilterWarning(results.length);
@@ -1210,7 +1224,7 @@ function loadData(){
     complete: function(res){
       allMovies = normalizeRows(res.data);
       fuse = buildFuse(allMovies);
-      countLabel.textContent = `${allMovies.length} Títulos`;
+      countLabel.innerHTML = `<strong>${allMovies.length}</strong> Títulos`;
       document.getElementById("configNote").style.display = "none";
       renderPlatformChips(allMovies);
       renderTypeChips(allMovies);
