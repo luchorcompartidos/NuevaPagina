@@ -190,6 +190,22 @@
   .tag-suggestions:empty{display:none;border-bottom:none;margin-bottom:0;padding-bottom:0;}
 
   .tag-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .tags-more-btn{
+    display:inline-block;
+    margin-top:12px;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--gold);
+    font-family:var(--mono);
+    font-size:0.75rem;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    padding:8px 14px;
+    border-radius:20px;
+    cursor:pointer;
+    transition:all 0.15s;
+  }
+  .tags-more-btn:hover{border-color:var(--gold);background:rgba(214,169,74,0.08);}
   .chip{
     font-family:var(--mono);
     font-size:0.8rem;
@@ -558,6 +574,7 @@
       <div class="tag-suggestions" id="tagSuggestions"></div>
       <div class="tag-chips tag-chips-selected" id="tagSelectedChips"></div>
       <div class="tag-chips" id="tagChips"></div>
+      <button class="tags-more-btn" id="tagsShowMoreBtn" style="display:none;">Mostrar más…</button>
     </div>
   </div>
 
@@ -765,6 +782,60 @@ function computeTagList(movies){
   allTagsSorted = [...tagSet].sort((a,b) => a.localeCompare(b, "es"));
 }
 
+let tagsExpanded = false;
+const TAG_LINES_BUDGET = 12;
+
+function countChipLines(container){
+  const chips = Array.from(container.children);
+  if(chips.length === 0) return 0;
+  let lines = 1;
+  let lastTop = chips[0].offsetTop;
+  chips.forEach(el => {
+    if(el.offsetTop > lastTop + 2){
+      lines++;
+      lastTop = el.offsetTop;
+    }
+  });
+  return lines;
+}
+
+function applyTagsLineLimit(){
+  const selectedContainer = document.getElementById("tagSelectedChips");
+  const fullContainer = document.getElementById("tagChips");
+  const moreBtn = document.getElementById("tagsShowMoreBtn");
+
+  const chips = Array.from(fullContainer.children);
+  chips.forEach(el => { el.style.display = ""; });
+
+  if(tagsExpanded || chips.length === 0){
+    moreBtn.style.display = "none";
+    return;
+  }
+
+  const selectedLines = countChipLines(selectedContainer);
+  const budget = Math.max(0, TAG_LINES_BUDGET - selectedLines);
+
+  let lines = 1;
+  let lastTop = chips[0].offsetTop;
+  let cutoffIndex = null;
+  chips.forEach((el, idx) => {
+    if(el.offsetTop > lastTop + 2){
+      lines++;
+      lastTop = el.offsetTop;
+      if(lines > budget && cutoffIndex === null){
+        cutoffIndex = idx;
+      }
+    }
+  });
+
+  if(cutoffIndex !== null){
+    chips.slice(cutoffIndex).forEach(el => { el.style.display = "none"; });
+    moreBtn.style.display = "inline-block";
+  } else {
+    moreBtn.style.display = "none";
+  }
+}
+
 function toggleTag(tag){
   if(activeTags.has(tag)) activeTags.delete(tag);
   else activeTags.add(tag);
@@ -772,6 +843,7 @@ function toggleTag(tag){
   renderSelectedTagChips();
   renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
   updateClearTagsBtn();
+  applyTagsLineLimit();
   runSearch();
 }
 
@@ -1144,6 +1216,7 @@ function loadData(){
       renderTypeChips(allMovies);
       computeTagList(allMovies);
       renderTagChips();
+      applyTagsLineLimit();
       runSearch();
     },
     error: function(err){
@@ -1184,10 +1257,22 @@ function clearAllTags(){
   renderSelectedTagChips();
   renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
   updateClearTagsBtn();
+  applyTagsLineLimit();
   runSearch();
 }
 
 document.getElementById("clearTagsBtn").addEventListener("click", clearAllTags);
+document.getElementById("tagsShowMoreBtn").addEventListener("click", () => {
+  tagsExpanded = true;
+  applyTagsLineLimit();
+});
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  if(tagsExpanded) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(applyTagsLineLimit, 150);
+});
 
 document.getElementById("overlay").addEventListener("click", (e) => {
   if(e.target.id === "overlay") closeFicha();
