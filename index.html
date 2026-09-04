@@ -244,6 +244,46 @@
     line-height:1;
   }
   .qs-clear-btn:hover{color:#c47a5a;}
+
+  .filter-warning:empty{display:none;}
+  .fw-box{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    background:rgba(122,46,46,0.12);
+    border:1px solid var(--wine);
+    border-radius:2px;
+    padding:12px 14px;
+    margin-bottom:16px;
+  }
+  .fw-message{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:#e0b3a3;
+    line-height:1.5;
+  }
+  .fw-message strong{color:var(--gold);}
+  .fw-clear-btn{
+    flex-shrink:0;
+    background:transparent;
+    border:1px solid var(--wine);
+    color:#e0b3a3;
+    font-family:var(--mono);
+    font-size:0.85rem;
+    width:30px;height:30px;
+    border-radius:50%;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all 0.15s;
+  }
+  .fw-clear-btn:hover{background:var(--wine);color:var(--ink);}
+  .fw-cleared-msg{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--ink-dim);
+    margin-bottom:16px;
+  }
   .qs-value{
     font-family:var(--mono);
     font-size:0.9rem;
@@ -524,6 +564,8 @@
 
   <div class="query-summary" id="querySummary"></div>
 
+  <div class="filter-warning" id="filterWarning"></div>
+
   <div class="sort-row">
     <label for="sortSelect">Ordenar por</label>
     <select id="sortSelect">
@@ -795,6 +837,7 @@ function renderPlatformChips(movies){
       if(activePlatforms.has(platform)) activePlatforms.delete(platform);
       else activePlatforms.add(platform);
       chip.classList.toggle("active");
+      otherFiltersJustCleared = false;
       runSearch();
     };
     container.appendChild(chip);
@@ -818,6 +861,7 @@ function renderTypeChips(movies){
       if(activeTypes.has(type)) activeTypes.delete(type);
       else activeTypes.add(type);
       chip.classList.toggle("active");
+      otherFiltersJustCleared = false;
       runSearch();
     };
     container.appendChild(chip);
@@ -919,6 +963,40 @@ function renderQuerySummary(query){
   }
 }
 
+let otherFiltersJustCleared = false;
+
+function clearOtherFilters(){
+  activePlatforms.clear();
+  activeTypes.clear();
+  renderPlatformChips(allMovies);
+  renderTypeChips(allMovies);
+  otherFiltersJustCleared = true;
+  runSearch();
+}
+
+function renderFilterWarning(resultsCount){
+  const container = document.getElementById("filterWarning");
+  const hasOtherFilters = activePlatforms.size > 0 || activeTypes.size > 0;
+
+  if(resultsCount === 0 && hasOtherFilters){
+    container.innerHTML = `
+      <div class="fw-box">
+        <div class="fw-message">Otros Filtros aplicados (Plataforma, Tipo, etc.) - REVISAR SELECCIÓN o Limpiar estos filtros presionando la '<strong>x</strong>'</div>
+        <button class="fw-clear-btn" id="fwClearBtn" aria-label="Limpiar filtros de plataforma y tipo">✕</button>
+      </div>
+    `;
+    document.getElementById("fwClearBtn").addEventListener("click", clearOtherFilters);
+    return;
+  }
+
+  if(otherFiltersJustCleared){
+    container.innerHTML = `<div class="fw-cleared-msg">No se aplicaron otros filtros.</div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+}
+
 function renderResults(results, query, showPercentWithoutQuery){
   const container = document.getElementById("results");
   const status = document.getElementById("status");
@@ -930,6 +1008,7 @@ function renderResults(results, query, showPercentWithoutQuery){
   status.classList.remove("err");
 
   renderQuerySummary(query);
+  renderFilterWarning(results.length);
 
   if(results.length === 0){
     container.innerHTML = '<div class="empty">No se encontraron coincidencias. Probá con otro término o quitá filtros.</div>';
