@@ -16,9 +16,86 @@
     --wine: #7a2e2e;
     --line: #3a342a;
     --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --zoom-level: 1;
   }
   *{box-sizing:border-box;}
   html{font-size:17px;} /* +1pt aprox. sobre el tamaño base, afecta todo el texto en rem */
+
+  /* ==== Control de zoom responsive ====
+     Camino principal: CSS zoom (reacomoda el layout real, sin scroll horizontal).
+     #zoomWrapper escala TODO el contenido principal; la .ficha (modal) usa la
+     misma variable para escalar igual, sin heredar de #zoomWrapper (queda fuera). */
+  #zoomWrapper{
+    zoom: var(--zoom-level);
+  }
+
+  /* Fallback para navegadores muy antiguos sin soporte de "zoom" (se activa
+     agregando la clase .zoom-fallback a <html> vía JS, tras feature-detect).
+     Usa transform:scale + compensación de ancho para evitar scroll horizontal;
+     el contenido solo puede crecer hacia abajo, igual que con "zoom". */
+  html.zoom-fallback #zoomWrapper{
+    zoom: normal;
+    transform: scale(var(--zoom-level));
+    transform-origin: top left;
+    width: calc(100% / var(--zoom-level));
+  }
+  html.zoom-fallback .ficha{
+    zoom: normal !important;
+    transform: scale(var(--zoom-level));
+    transform-origin: center;
+  }
+
+  .zoom-bar{
+    position:fixed;
+    top:14px;
+    right:14px;
+    z-index:200;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:24px;
+    padding:6px 8px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.35);
+    zoom: 1 !important;
+    transform:none !important;
+  }
+  .zoom-indicator{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-dim);
+    min-width:34px;
+    text-align:center;
+    letter-spacing:0.02em;
+    user-select:none;
+  }
+  .zoom-bar button{
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--ink);
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all 0.15s;
+    padding:0;
+  }
+  .zoom-bar button:hover{border-color:var(--gold);color:var(--gold);}
+  .zoom-bar button#zoom100{
+    width:auto;
+    border-radius:14px;
+    padding:0 9px;
+    font-size:11px;
+  }
+  .zoom-bar button.zoom-reset{color:var(--gold-dim);}
+  .zoom-bar button.zoom-reset:hover{color:var(--gold);border-color:var(--gold);}
+  .zoom-bar button:disabled{opacity:0.35;cursor:default;}
+  .zoom-bar button:disabled:hover{border-color:var(--line);color:var(--ink);}
+
   body{
     margin:0;
     background:
@@ -472,6 +549,7 @@
     width:100%;
     padding:28px 28px 24px;
     position:relative;
+    zoom: var(--zoom-level);
   }
   .ficha .close-btn{
     position:absolute;
@@ -541,6 +619,16 @@
 </style>
 </head>
 <body>
+
+<div class="zoom-bar" id="zoomBar">
+  <span class="zoom-indicator" id="zoomIndicator">100%</span>
+  <button id="zoomOut" aria-label="Reducir tamaño">−</button>
+  <button id="zoom100" aria-label="Ir a 100%">100%</button>
+  <button id="zoomIn" aria-label="Ampliar tamaño">+</button>
+  <button id="zoomReset" class="zoom-reset" aria-label="Restablecer zoom" title="Restablecer">⟲</button>
+</div>
+
+<div id="zoomWrapper">
 <div class="wrap">
 
   <header>
@@ -609,6 +697,7 @@
 
   <div class="results" id="results"></div>
 
+</div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -1295,6 +1384,62 @@ document.getElementById("overlay").addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if(e.key === "Escape") closeFicha();
 });
+
+/* ==== Control de zoom responsive ==== */
+const ZOOM_STORAGE_KEY = "cinemateca_zoom_level";
+const ZOOM_MIN = 70;
+const ZOOM_MAX = 160;
+const ZOOM_STEP = 10;
+const ZOOM_DEFAULT = 100;
+
+function readStoredZoom(){
+  try{
+    const raw = localStorage.getItem(ZOOM_STORAGE_KEY);
+    const n = parseInt(raw, 10);
+    if(!isNaN(n) && n >= ZOOM_MIN && n <= ZOOM_MAX) return n;
+  }catch(e){ /* localStorage no disponible (ej. vista previa embebida) */ }
+  return ZOOM_DEFAULT;
+}
+
+function saveZoom(value){
+  try{ localStorage.setItem(ZOOM_STORAGE_KEY, String(value)); }catch(e){ /* noop */ }
+}
+
+let currentZoom = readStoredZoom();
+
+function detectZoomSupport(){
+  try{
+    if(window.CSS && CSS.supports && CSS.supports("zoom", "1")) return true;
+  }catch(e){}
+  return "zoom" in document.documentElement.style;
+}
+
+if(!detectZoomSupport()){
+  document.documentElement.classList.add("zoom-fallback");
+}
+
+function applyZoom(){
+  document.documentElement.style.setProperty("--zoom-level", currentZoom / 100);
+  document.getElementById("zoomIndicator").textContent = currentZoom + "%";
+  document.getElementById("zoomOut").disabled = currentZoom <= ZOOM_MIN;
+  document.getElementById("zoomIn").disabled = currentZoom >= ZOOM_MAX;
+  saveZoom(currentZoom);
+}
+
+function setZoom(value){
+  currentZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, value));
+  applyZoom();
+}
+
+document.getElementById("zoomOut").addEventListener("click", () => setZoom(currentZoom - ZOOM_STEP));
+document.getElementById("zoomIn").addEventListener("click", () => setZoom(currentZoom + ZOOM_STEP));
+document.getElementById("zoom100").addEventListener("click", () => setZoom(100));
+document.getElementById("zoomReset").addEventListener("click", () => {
+  try{ localStorage.removeItem(ZOOM_STORAGE_KEY); }catch(e){}
+  setZoom(ZOOM_DEFAULT);
+});
+
+applyZoom();
 
 loadData();
 </script>
