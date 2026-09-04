@@ -173,17 +173,18 @@
 
   .tag-chips-selected{
     padding-bottom:10px;
+    margin-top:6px;
     margin-bottom:8px;
     border-bottom:1px dashed var(--line);
   }
-  .tag-chips-selected:empty{display:none;border-bottom:none;margin-bottom:0;padding-bottom:0;}
+  .tag-chips-selected:empty{display:none;border-bottom:none;margin-top:0;margin-bottom:0;padding-bottom:0;}
 
   .tag-suggestions{
     display:flex;
     flex-wrap:wrap;
     gap:8px;
-    padding-bottom:10px;
-    margin-bottom:8px;
+    padding-bottom:14px;
+    margin-bottom:14px;
     border-bottom:1px dashed var(--line);
   }
   .tag-suggestions:empty{display:none;border-bottom:none;margin-bottom:0;padding-bottom:0;}
@@ -219,14 +220,30 @@
   .status.err{color:#c47a5a;}
 
   .query-summary:empty{display:none;}
+  .qs-line-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:3px;
+  }
   .qs-line{
     font-family:var(--mono);
     font-size:0.68rem;
     text-transform:uppercase;
     letter-spacing:0.06em;
     color:var(--ink-dim);
-    margin-bottom:3px;
   }
+  .qs-clear-btn{
+    background:transparent;
+    border:none;
+    color:var(--ink-dim);
+    font-family:var(--mono);
+    font-size:0.75rem;
+    cursor:pointer;
+    padding:2px 4px;
+    line-height:1;
+  }
+  .qs-clear-btn:hover{color:#c47a5a;}
   .qs-value{
     font-family:var(--mono);
     font-size:0.9rem;
@@ -862,7 +879,10 @@ function renderQuerySummary(query){
 
   if(query){
     html += `
-      <div class="qs-line">Texto buscado:</div>
+      <div class="qs-line-row">
+        <span class="qs-line">Texto buscado:</span>
+        <button class="qs-clear-btn" id="qsClearText" aria-label="Borrar texto buscado">✕</button>
+      </div>
       <div class="qs-value">"${escapeHtml(query)}"</div>
     `;
   }
@@ -873,12 +893,30 @@ function renderQuerySummary(query){
       .map(t => `<span class="qs-tag">${escapeHtml(t)}</span>`)
       .join("");
     html += `
-      <div class="qs-line">Tags seleccionados:</div>
+      <div class="qs-line-row">
+        <span class="qs-line">Tags seleccionados:</span>
+        <button class="qs-clear-btn" id="qsClearTags" aria-label="Borrar tags seleccionados">✕</button>
+      </div>
       <div class="qs-tags-row">${tagsHtml}</div>
     `;
   }
 
   container.innerHTML = html;
+
+  if(query){
+    document.getElementById("qsClearText").addEventListener("click", () => {
+      const input = document.getElementById("searchInput");
+      input.value = "";
+      runSearch();
+      input.focus();
+    });
+  }
+
+  if(activeTags.size > 0){
+    document.getElementById("qsClearTags").addEventListener("click", () => {
+      clearAllTags();
+    });
+  }
 }
 
 function renderResults(results, query, showPercentWithoutQuery){
@@ -1059,7 +1097,7 @@ document.getElementById("tagSearchClear").addEventListener("click", () => {
   input.focus();
 });
 
-document.getElementById("clearTagsBtn").addEventListener("click", () => {
+function clearAllTags(){
   if(activeTags.size === 0) return;
   activeTags.clear();
   renderTagChips();
@@ -1067,7 +1105,9 @@ document.getElementById("clearTagsBtn").addEventListener("click", () => {
   renderTagSuggestions(document.getElementById("tagSearchInput").value.trim());
   updateClearTagsBtn();
   runSearch();
-});
+}
+
+document.getElementById("clearTagsBtn").addEventListener("click", clearAllTags);
 
 document.getElementById("overlay").addEventListener("click", (e) => {
   if(e.target.id === "overlay") closeFicha();
